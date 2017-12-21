@@ -91,7 +91,7 @@ class SkipGramModel:
         self._data()
         self._create_summaries()
 
-def train_model(model, batch_gen, num_train_steps, action):
+def train_model(model, batch_gen, num_train_steps):
     saver = tf.train.Saver() # for saving variables like nce_weight, nce_bias, embedding_matrix
 
     initial_step = 0
