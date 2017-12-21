@@ -6,9 +6,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import zipfile
 import tensorflow as tf
 import numpy as np
+import zipfile
+from collections import Counter
+import random
+import utils
 
 FILE_PATH = "./data/text8.zip"
 
@@ -25,28 +28,32 @@ def build_vocab(words, vocab_size):
     count = [('UNK', -1)]
     count.extend(Counter(words).most_common(vocab_size - 1))
     index = 0
-    for word, _ in count:
-        vocab[word] = index
-        index += 1
+    utils.make_dir('processed')
+    with open('processed/vocab_1000.tsv', "w") as f:
+        for word, _ in count:
+            vocab[word] = index
+            if index < 1000:
+                f.write(word + "\n")
+            index += 1
     return vocab
 
 def convert_words_to_vocab(words, vocab):
     """Replace all the words in dataset with the index in the vocab"""
     return [vocab[word] if word in vocab else 0 for word in words]
 
-def generate_sample(index_words, context_window_size):
+def generate_sample(index_vocab, context_window_size):
     """Generate training pairs according to skip-gram model"""
     for index, center in enumerate(index_vocab):
-        contex = random.randint(1, context_window_size)
+        context = random.randint(1, context_window_size)
         for target in index_vocab[max(0, index - context) : index]:
             yield center, target
-        for target in index_vocab[index + 1 : index + center + 1]:
+        for target in index_vocab[index + 1 : index + context + 1]:
             yield center, target
 
 def get_batch(iterator, batch_size):
     """generate batches and return them as numpy arrays"""
     while True:
-        center_batch = np.zeros(batch_size, dtype=np.int32)
+        center_batch = np.zeros([batch_size], dtype=np.int32)
         target_batch = np.zeros([batch_size, 1])
         for ind in range(batch_size):
             center_batch[ind], target_batch[ind] = next(iterator)
@@ -54,7 +61,7 @@ def get_batch(iterator, batch_size):
 
 def process_data(vocab_size, context_window_size, batch_size):
     words = read_data(FILE_PATH)
-    vocab = build_vocab(words)
+    vocab = build_vocab(words, vocab_size)
     index_words = convert_words_to_vocab(words, vocab)
     del words
     iterator = generate_sample(index_words, context_window_size)
