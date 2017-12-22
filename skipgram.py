@@ -27,18 +27,6 @@ LEARNING_RATE = 1
 NUM_TRAINING_STEP = 100000
 SKIP_STEP = 2000
 
-def define_scope(function):
-    attribute = '_cache_' + function.__name__
-
-    @property
-    @functools.wraps(function)
-    def decorator(self):
-        if not hasattr(self, attribute):
-            with tf.variable_scope(function.__name__):
-                setattr(self, attribute, function(self))
-        return getattr(self, attribute)
-
-    return decorator
 
 class SkipGramModel:
     """ Build the graph for word2vec model """
@@ -54,31 +42,30 @@ class SkipGramModel:
         self.center_words = tf.placeholder(tf.int32, shape=[self.batch_size], name="center_words")
         self.target_words = tf.placeholder(tf.int32, shape=[self.batch_size, 1], name="taget_words")
 
-    @define_scope
-    def embedding_matrix(self):
-        return tf.Variable(tf.random_uniform([self.vocab_size, self.embed_size], -1.0, 1.0), name="embedding_matrix")
+    def _create_embedding_matrix(self):
+        with tf.name_scope("embeddings"):
+            self.embedding_matrix = tf.Variable(tf.random_uniform([self.vocab_size, self.embed_size], -1.0, 1.0), name="embedding_matrix")
     
-    @define_scope
-    def loss(self):
-        embed = tf.nn.embedding_lookup(self.embedding_matrix, self.center_words, name='embed')
+    def _create_loss(self):
+        with tf.name_scope("loss"):
+            embed = tf.nn.embedding_lookup(self.embedding_matrix, self.center_words, name='embed')
 
-        nce_weight = tf.Variable(tf.truncated_normal([self.vocab_size, self.embed_size],
-                                                    stddev=1.0 / (self.embed_size ** 0.5)), 
-                                                    name='nce_weight')
-        nce_bias = tf.Variable(tf.zeros([VOCAB_SIZE]), name='nce_bias')
+            nce_weight = tf.Variable(tf.truncated_normal([self.vocab_size, self.embed_size],
+                                                        stddev=1.0 / (self.embed_size ** 0.5)), 
+                                                        name='nce_weight')
+            nce_bias = tf.Variable(tf.zeros([VOCAB_SIZE]), name='nce_bias')
 
-        loss = tf.reduce_mean(tf.nn.nce_loss(weights=nce_weight, 
-                                                    biases=nce_bias, 
-                                                    labels=self.target_words, 
-                                                    inputs=embed, 
-                                                    num_sampled=self.num_sampled, 
-                                                    num_classes=self.vocab_size), name='loss')
-        return loss
+            self.loss = tf.reduce_mean(tf.nn.nce_loss(weights=nce_weight, 
+                                                        biases=nce_bias, 
+                                                        labels=self.target_words, 
+                                                        inputs=embed, 
+                                                        num_sampled=self.num_sampled, 
+                                                        num_classes=self.vocab_size), name='loss')
     
-    @define_scope
-    def optimizer(self):
-        opt = tf.train.GradientDescentOptimizer(self.lr)
-        return opt.minimize(self.loss, global_step=self.global_step)
+    def _create_optimizer(self):
+        with tf.name_scope("optimizer"):
+            opt = tf.train.GradientDescentOptimizer(self.lr)
+            self.optimizer = opt.minimize(self.loss, global_step=self.global_step)
 
     def _create_summaries(self):
         with tf.name_scope("summaries"):
@@ -89,6 +76,9 @@ class SkipGramModel:
     def build_graph(self):
         """ Build the graph for our model """
         self._data()
+        self._create_embedding_matrix()
+        self._create_loss()
+        self._create_optimizer()
         self._create_summaries()
 
 def train_model(model, batch_gen, num_train_steps):
